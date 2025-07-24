@@ -9,6 +9,9 @@ train_df = pd.read_csv("CFB.csv")
 predict_df = pd.read_csv("CFB25.csv")
 predict_df.rename(columns={"TEAM": "Team"}, inplace=True)
 
+# Load team logos
+logos_df = pd.read_csv("team_logos.csv")
+
 # === Train model ===
 X_train = train_df[['2023 Power', '2024 RP%', '2024 RR', '2024 TPR', '2024 SOS']]
 Y_train = train_df['2024 Power']
@@ -47,9 +50,12 @@ ranked_df = predict_df[['Team', 'Rescaled 2025 SP+']].sort_values(by='Rescaled 2
 ranked_df['Rank'] = ranked_df.index + 1
 ranked_df = ranked_df[['Rank', 'Team', 'Rescaled 2025 SP+']]
 
-# === Streamlit UI ===
-st.title("🏈 CFB Spread Predictor (2025)")
+# Merge logos
+ranked_df = ranked_df.merge(logos_df, on='Team', how='left')
 
+# === Streamlit UI ===
+st.set_page_config(page_title="CFB Spread Predictor", layout="centered")
+st.title("🏈 CFB Spread Predictor (2025)")
 st.markdown("Select two teams below to calculate a projected point spread and 95% confidence interval.")
 
 team1 = st.selectbox("Team 1", ranked_df["Team"])
@@ -69,8 +75,27 @@ if st.button("Calculate Spread"):
     ci_low = round(spread - 1.96 * resid_std, 1)
     ci_high = round(spread + 1.96 * resid_std, 1)
 
-    st.subheader(f"🏆 Projected Spread")
-    st.markdown(f"**{team1} vs {team2}**")
+    # Get logos
+    logo1 = ranked_df[ranked_df["Team"] == team1]["Logo"].values[0]
+    logo2 = ranked_df[ranked_df["Team"] == team2]["Logo"].values[0]
+
+    # Display logos and matchup
+    st.subheader("🏆 Projected Spread")
+    st.markdown(
+        f"""
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <div style="text-align: center;">
+                <img src="{logo1}" width="60"/><br><strong>{team1}</strong>
+            </div>
+            <div style="font-size: 24px;">vs</div>
+            <div style="text-align: center;">
+                <img src="{logo2}" width="60"/><br><strong>{team2}</strong>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if home_team != "Neutral Site":
         st.markdown(f"🏠 Home Field Advantage: **{home_team}** (+2.5 pts)")
 
@@ -78,5 +103,10 @@ if st.button("Calculate Spread"):
     st.markdown(f"🔒 **95% Confidence Interval:** ({ci_low}, {ci_high})")
 
 st.markdown("---")
-if st.checkbox("Show full SP+ rankings"):
-    st.dataframe(ranked_df, use_container_width=True)
+if st.checkbox("Show full SP+ rankings with logos"):
+    display_df = ranked_df.copy()
+    display_df['Team'] = display_df.apply(
+        lambda row: f'<img src="{row.Logo}" width="40"/> {row.Team}', axis=1
+    )
+    display_df = display_df[['Rank', 'Team', 'Rescaled 2025 SP+']]
+    st.write(display_df.to_html(escape=False, index=False), unsafe_allow_html=True)
